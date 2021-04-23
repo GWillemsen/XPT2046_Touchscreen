@@ -30,19 +30,30 @@
 static XPT2046_Touchscreen 	*isrPinptr;
 void isrPin(void);
 
-bool XPT2046_Touchscreen::begin(SPIClass &wspi)
+#if defined(ESP32)
+bool XPT2046_Touchscreen::begin(SPIClass &wspi, int8_t sck, int8_t miso, int8_t mosi)
+{
+	_pspi = &wspi;
+	if (sck != -1 || miso != -1 || mosi != -1)
+	{
+		_pspi->begin(sck, miso, mosi);
+	}
+	else
+	{
+		_pspi->begin();
+	}
+	this->setupSPIIO()
+	return true;
+}
+#else !defined(ESP32)
+bool XPT2046_Touchscreen::begin(SPIClass &wspi = SPI)
 {
 	_pspi = &wspi;
 	_pspi->begin();
-	pinMode(csPin, OUTPUT);
-	digitalWrite(csPin, HIGH);
-	if (255 != tirqPin) {
-		pinMode( tirqPin, INPUT );
-		attachInterrupt(digitalPinToInterrupt(tirqPin), isrPin, FALLING);
-		isrPinptr = this;
-	}
+	this->setupSPIIO()
 	return true;
 }
+#endif
 
 #if defined(_FLEXIO_SPI_H_)
 #define FLEXSPI_SETTING     FlexIOSPISettings(2000000, MSBFIRST, SPI_MODE0)
@@ -51,6 +62,13 @@ bool XPT2046_Touchscreen::begin(FlexIOSPI &wflexspi)
 	_pspi = nullptr; // make sure we dont use this one... 
 	_pflexspi = &wflexspi;
 	_pflexspi->begin();
+	this->setupSPIOIO();
+	return true;
+}
+#endif
+
+void XPT2046_Touchscreen::setupSPIIO()
+{
 	pinMode(csPin, OUTPUT);
 	digitalWrite(csPin, HIGH);
 	if (255 != tirqPin) {
@@ -58,10 +76,7 @@ bool XPT2046_Touchscreen::begin(FlexIOSPI &wflexspi)
 		attachInterrupt(digitalPinToInterrupt(tirqPin), isrPin, FALLING);
 		isrPinptr = this;
 	}
-	return true;
 }
-#endif
-
 
 ISR_PREFIX
 void isrPin( void )
@@ -100,18 +115,18 @@ bool XPT2046_Touchscreen::bufferEmpty()
 	return ((millis() - msraw) < MSEC_THRESHOLD);
 }
 
-static int16_t besttwoavg( int16_t x , int16_t y , int16_t z ) {
-  int16_t da, db, dc;
-  int16_t reta = 0;
-  if ( x > y ) da = x - y; else da = y - x;
-  if ( x > z ) db = x - z; else db = z - x;
-  if ( z > y ) dc = z - y; else dc = y - z;
+static int16_t besttwoavg(int16_t x, int16_t y, int16_t z) {
+	int16_t da, db, dc;
+	int16_t reta = 0;
+	if (x > y) da = x - y; else da = y - x;
+	if (x > z) db = x - z; else db = z - x;
+	if (z > y) dc = z - y; else dc = y - z;
 
-  if ( da <= db && da <= dc ) reta = (x + y) >> 1;
-  else if ( db <= da && db <= dc ) reta = (x + z) >> 1;
-  else reta = (y + z) >> 1;   //    else if ( dc <= da && dc <= db ) reta = (x + y) >> 1;
+	if (da <= db && da <= dc) reta = (x + y) >> 1;
+	else if (db <= da && db <= dc) reta = (x + z) >> 1;
+	else reta = (y + z) >> 1;   //    else if ( dc <= da && dc <= db ) reta = (x + y) >> 1;
 
-  return (reta);
+	return (reta);
 }
 
 // TODO: perhaps a future version should offer an option for more oversampling,
@@ -183,32 +198,32 @@ void XPT2046_Touchscreen::update()
 		return;
 	}
 	zraw = z;
-	
+
 	// Average pair with least distance between each measured x then y
 	//Serial.printf("    z1=%d,z2=%d  ", z1, z2);
 	//Serial.printf("p=%d,  %d,%d  %d,%d  %d,%d", zraw,
 		//data[0], data[1], data[2], data[3], data[4], data[5]);
-	int16_t x = besttwoavg( data[0], data[2], data[4] );
-	int16_t y = besttwoavg( data[1], data[3], data[5] );
-	
+	int16_t x = besttwoavg(data[0], data[2], data[4]);
+	int16_t y = besttwoavg(data[1], data[3], data[5]);
+
 	//Serial.printf("    %d,%d", x, y);
 	//Serial.println();
 	if (z >= Z_THRESHOLD) {
 		msraw = now;	// good read completed, set wait
 		switch (rotation) {
-		  case 0:
+		case 0:
 			xraw = 4095 - y;
 			yraw = x;
 			break;
-		  case 1:
+		case 1:
 			xraw = x;
 			yraw = y;
 			break;
-		  case 2:
+		case 2:
 			xraw = y;
 			yraw = 4095 - x;
 			break;
-		  default: // 3
+		default: // 3
 			xraw = 4095 - x;
 			yraw = 4095 - y;
 		}

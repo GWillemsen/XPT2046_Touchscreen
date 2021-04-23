@@ -49,7 +49,11 @@ class XPT2046_Touchscreen {
 public:
 	constexpr XPT2046_Touchscreen(uint8_t cspin, uint8_t tirq=255)
 		: csPin(cspin), tirqPin(tirq) { }
+#if defined(ESP32)
+	bool begin(SPIClass &wspi = SPI, int8_t sck = -1, int8_t miso = -1, int8_t mosi = -1);
+#else !defined(ESP32)
 	bool begin(SPIClass &wspi = SPI);
+#endif
 #if defined(_FLEXIO_SPI_H_)
 	bool begin(FlexIOSPI &wflexspi);
 #endif
@@ -65,6 +69,7 @@ public:
 	volatile bool isrWake=true;
 
 private:
+	void setupSPIIO();
 	void update();
 	uint8_t csPin, tirqPin, rotation=1;
 	int16_t xraw=0, yraw=0, zraw=0;
